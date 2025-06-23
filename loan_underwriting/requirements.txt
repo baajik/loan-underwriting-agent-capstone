@@ -2,3 +2,12 @@ gradio>=4.0.0
 python-dotenv>=1.0.0
 PyPDF2>=3.0.0
 python-docx>=0.8.11 
+langchain
+langchain_core
+langchain_community
+langchain_openai
+langchain_text_splitters
+pandas 
+PyPDF2 
+openpyxl
+tabulate
