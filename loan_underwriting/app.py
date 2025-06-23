@@ -3,7 +3,10 @@ import gradio as gr
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
-from loan_underwriting.week1.factory import Week1Mode, create_chat_implementation
+from week1.factory import Week1Mode, create_chat_implementation
+
+import pandas as pd
+import PyPDF2
 
 # Load environment variables
 load_dotenv()
@@ -28,18 +31,60 @@ def create_demo(mode_str: str = "part1"):
     chat_interface.initialize()
 
     # Helper: process uploaded files
-    def process_files(files: List) -> str:
-        file_contents = []
-        for file in files or []:
+    # def process_files(files: List) -> str:
+    #     file_contents = []
+    #     for file in files or []:
+    #         try:
+    #             if file.name.lower().endswith(".txt"):
+    #                 content = file.read().decode("utf-8")
+    #                 file_contents.append(f"File: {file.name}\nContent:\n{content}")
+    #             else:
+    #                 file_contents.append(f"File: {file.name} (content extraction not implemented)")
+    #         except Exception as e:
+    #             file_contents.append(f"Error reading {file.name}: {str(e)}")
+    #     return "\n\n".join(file_contents)
+
+    def process_files(files):
+        if not files:
+            return "No files uploaded."
+        results = []
+        for file in files:
+            name = getattr(file, "name", str(file))
+            ext = name.split('.')[-1].lower()
+            info = f"**{name}**\n"
             try:
-                if file.name.lower().endswith(".txt"):
-                    content = file.read().decode("utf-8")
-                    file_contents.append(f"File: {file.name}\nContent:\n{content}")
+                if ext == "pdf":
+                    reader = PyPDF2.PdfReader(file)
+                    num_pages = len(reader.pages)
+                    info += f"- Type: PDF\n- Pages: {num_pages}\n"
+                    if num_pages > 0:
+                        first_page = reader.pages[0]
+                        text = first_page.extract_text() or ""
+                        lines = text.splitlines()
+                        preview = "\n".join(lines[:5])
+                        info += f"- Preview (first 5 lines):\n{preview if preview else '[No extractable text]'}"
+                    else:
+                        info += "- [No pages in PDF]"
+                elif ext == "txt":
+                    with open(file, "r", encoding="utf-8") as f:
+                        lines = [next(f).rstrip() for _ in range(5)]
+                    preview = "\n".join(lines)
+                    info += f"- Type: TXT\n- Preview (first 5 lines):\n{preview}"
+                elif ext == "csv":
+                    df = pd.read_csv(file, nrows=5)  # Only read first 5 rows[1][5][8]
+                    info += f"- Type: CSV\n- Preview (first 5 rows):\n{df.to_markdown(index=False)}"
+                elif ext == "xlsx":
+                    df = pd.read_excel(file, nrows=5)  # Only read first 5 rows[4][6]
+                    info += f"- Type: XLSX\n- Preview (first 5 rows):\n{df.to_markdown(index=False)}"
                 else:
-                    file_contents.append(f"File: {file.name} (content extraction not implemented)")
+                    info += "- Unsupported file type."
             except Exception as e:
-                file_contents.append(f"Error reading {file.name}: {str(e)}")
-        return "\n\n".join(file_contents)
+                info += f"- Error: {str(e)}"
+            results.append(info)
+        return "\n\n".join(results)
+
+
+
 
     # Actual response logic
     def respond(message: str, history: List[Dict[str, str]], files: Optional[List] = None) -> str:
@@ -77,21 +122,27 @@ def create_demo(mode_str: str = "part1"):
     }
 
     # Build UI using Blocks
-    with gr.Blocks(theme=gr.themes.Soft()) as demo:
-        gr.Markdown(f"# {titles[mode_str]}")
-        gr.Markdown(descriptions[mode_str])
+    # with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    #     gr.Markdown(f"# {titles[mode_str]}")
+    #     gr.Markdown(descriptions[mode_str])
 
-        file_upload = gr.File(
-            label="Upload loan documents",
-            file_count="multiple",
-            file_types=[
-                "text/plain",
-                "application/pdf",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                "application/msword"
-            ],
-            height=160
-        )
+    #     file_upload = gr.File(
+    #         label="Upload loan documents",
+    #         file_count="multiple",
+    #         file_types=[
+    #             "text/plain",
+    #             "application/pdf",
+    #             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    #             "application/msword"
+    #         ],
+    #         height=160
+    #     )
+    with gr.Blocks(theme=gr.themes.Soft()) as demo:
+        gr.Markdown("# Multi-file Uploader\nUpload PDF, TXT, XLSX, or CSV files.")
+        file_input = gr.File(file_count="multiple", file_types=[".pdf", ".txt", ".xlsx", ".csv"], label="Upload Loan Documents")
+        output = gr.Markdown()
+        file_input.change(process_files, inputs=file_input, outputs=output)
+
 
         chat = gr.ChatInterface(
             fn=None,  # We'll override below
